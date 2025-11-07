@@ -6,8 +6,7 @@ import threading
 from keep_alive import keep_alive
 
 # --- Cấu hình ---
-# CHÚ Ý QUAN TRỌNG: Nếu chỉ dùng 3 tài khoản, hãy xóa 3 dòng dưới đi.
-# Số lượng dòng ở đây PHẢI KHỚP với số token thực tế bạn có trong file .env
+# CHÚ Ý: Đảm bảo số lượng dòng ở đây khớp với số token trong file .env
 accounts = [
     {"token": os.getenv("TOKEN1"), "channel_id": os.getenv("CHANNEL_ID")},
     {"token": os.getenv("TOKEN2"), "channel_id": os.getenv("CHANNEL_ID")},
@@ -20,7 +19,7 @@ try:
 except (ValueError, TypeError):
     KTB_CHANNEL_ID = None
 
-# Vị trí cần nhặt (0, 1, 2 tương ứng với 3 thẻ từ trái qua phải)
+# Vị trí cần nhặt (0 = thẻ đầu tiên bên trái, 1 = giữa, 2 = bên phải)
 GRAB_INDICES = [0, 1, 2] 
 GRAB_TIMES = [1.3, 2.3, 3.2]
 
@@ -29,37 +28,47 @@ running_bots = []
 # --- Hàm xử lý chính ---
 
 async def react_and_message(message, grab_index, delay, bot, account_info):
-    """Đợi reaction xuất hiện và nhặt theo vị trí, có cơ chế dự phòng."""
+    """Đợi reaction xuất hiện và nhặt theo vị trí, có in debug chi tiết."""
+    # Đợi thời gian delay đã cấu hình cho từng acc
     await asyncio.sleep(delay)
     
     try:
-        fetched_message = await message.channel.fetch_message(message.id)
-        
-        # Cố gắng đợi tối đa 2 giây để Sofi thả đủ 3 reaction (kiểm tra mỗi 0.5s)
-        wait_count = 0
-        while len(fetched_message.reactions) < 3 and wait_count < 4:
-            await asyncio.sleep(0.5)
-            fetched_message = await message.channel.fetch_message(message.id)
-            wait_count += 1
+        # Vòng lặp thử tìm reaction trong 5 giây (mỗi lần thử cách nhau 1s)
+        fetched_message = None
+        for i in range(5):
+            try:
+                fetched_message = await message.channel.fetch_message(message.id)
+                # Nếu đã thấy đủ 3 reaction thì thoát vòng lặp ngay
+                if len(fetched_message.reactions) >= 3:
+                    break
+            except:
+                pass # Bỏ qua lỗi mạng tạm thời nếu có
+            print(f"[{account_info['channel_id']}] → ⏳ {bot.user.name} đang đợi Sofi load nút... (lần thử {i+1}/5)")
+            await asyncio.sleep(1)
 
-        # --- Cố gắng nhặt theo vị trí (Ưu tiên 1) ---
-        if len(fetched_message.reactions) > grab_index:
+        # --- Bắt đầu nhặt ---
+        if fetched_message and len(fetched_message.reactions) > grab_index:
+            # Lấy chính xác emoji mà Sofi đang dùng
             target_reaction = fetched_message.reactions[grab_index]
-            await fetched_message.add_reaction(target_reaction.emoji)
-            print(f"[{account_info['channel_id']}] → ✅ {bot.user.name} đã nhặt vị trí {grab_index+1}")
+            emoji_to_use = target_reaction.emoji
             
-        # --- Nếu không tìm thấy vị trí, dùng phương án dự phòng thả tim (Ưu tiên 2) ---
+            # Bot thả reaction
+            await fetched_message.add_reaction(emoji_to_use)
+            print(f"[{account_info['channel_id']}] → ✅ {bot.user.name} ĐÃ NHẶT vị trí {grab_index+1} (Emoji: {emoji_to_use})")
+            
         else:
-             print(f"[{account_info['channel_id']}] → ⚠️ Không thấy vị trí {grab_index+1}, {bot.user.name} thử thả '💖'...")
-             await fetched_message.add_reaction("💖")
+            # In ra debug để biết tại sao không nhặt được
+            seen_reactions = [str(r.emoji) for r in fetched_message.reactions] if fetched_message else "Không lấy được tin nhắn"
+            print(f"[{account_info['channel_id']}] → ❌ {bot.user.name} KHÔNG TÌM THẤY NÚT tại vị trí {grab_index+1}!")
+            print(f"   → Bot chỉ nhìn thấy các nút này: {seen_reactions}")
 
     except discord.Forbidden:
-        print(f"[{account_info['channel_id']}] → ❌ {bot.user.name} bị chặn (không có quyền thả reaction).")
+        print(f"[{account_info['channel_id']}] → 🚫 {bot.user.name} BỊ CHẶN (không có quyền thả reaction tại kênh này).")
     except Exception as e:
-        print(f"[{account_info['channel_id']}] → ❌ Lỗi khi {bot.user.name} nhặt: {e}")
+        print(f"[{account_info['channel_id']}] → ⚠️ Lỗi lạ khi {bot.user.name} nhặt: {e}")
     
+    # Đợi thêm chút rồi gửi lệnh kiểm tra balance
     await asyncio.sleep(2)
-    
     if KTB_CHANNEL_ID:
         try:
             target_channel = bot.get_channel(KTB_CHANNEL_ID)
@@ -78,7 +87,7 @@ async def run_account(account, grab_index, grab_time):
 
     @bot.event
     async def on_message(message):
-        # Kiểm tra đúng bot Sofi và đúng nội dung drop (cả tiếng Anh và Việt)
+        # Kiểm tra đúng bot Sofi và đúng nội dung drop
         if message.author.id == SOFI_ID and \
            ("is dropping" in message.content or "đã thả thẻ" in message.content) and \
            str(message.channel.id) == account["channel_id"]:
