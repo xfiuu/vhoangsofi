@@ -11,9 +11,6 @@ accounts = [
     {"token": os.getenv("TOKEN1"), "channel_id": os.getenv("CHANNEL_ID")},
     {"token": os.getenv("TOKEN2"), "channel_id": os.getenv("CHANNEL_ID")},
     {"token": os.getenv("TOKEN3"), "channel_id": os.getenv("CHANNEL_ID")},
-    {"token": os.getenv("TOKEN4"), "channel_id": os.getenv("CHANNEL_ID")},
-    {"token": os.getenv("TOKEN5"), "channel_id": os.getenv("CHANNEL_ID")},
-    {"token": os.getenv("TOKEN6"), "channel_id": os.getenv("CHANNEL_ID")},
 ]
 
 # ID của bot Sofi và kênh để gửi lệnh "sb"
@@ -148,3 +145,4 @@ async def main():
 if __name__ == "__main__":
     # Chạy hàm main của asyncio
     asyncio.run(main())
+
