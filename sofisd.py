@@ -23,39 +23,47 @@ GRAB_TIMES = [1.3, 2.3, 3.2]
 
 running_bots = []
 
-# --- Hàm xử lý chính ---
+# --- Hàm xử lý chính (ĐÃ NÂNG CẤP LÊN BUTTON) ---
 
-async def react_and_message(message, grab_index, delay, bot, account_info):
+async def click_and_message(message, grab_index, delay, bot, account_info):
     await asyncio.sleep(delay)
     try:
-        print(f"[{account_info['channel_id']}] → 🏁 {bot.user.name} bắt đầu nhặt vị trí {grab_index+1}...")
+        print(f"[{account_info['channel_id']}] → 🏁 {bot.user.name} đang tìm nút vị trí {grab_index+1}...")
 
-        # 1. Cố gắng tìm reaction thật
+        # 1. Tìm tin nhắn và đợi Button xuất hiện
         fetched_message = None
-        for i in range(3): # Thử 3 lần, mỗi lần 1s
+        found_buttons = []
+        
+        for i in range(5): # Thử 5 lần, mỗi lần 1s
             try:
                 fetched_message = await message.channel.fetch_message(message.id)
-                if len(fetched_message.reactions) >= 3:
+                
+                # Lọc ra tất cả các Button từ tin nhắn
+                found_buttons = []
+                for action_row in fetched_message.components:
+                    for component in action_row.children:
+                        # Chỉ lấy component là Button (loại trừ menu, link...)
+                        if isinstance(component, discord.Button):
+                             found_buttons.append(component)
+                
+                # Nếu tìm thấy ít nhất 3 nút (3 thẻ), thì dừng tìm kiếm
+                if len(found_buttons) >= 3:
                     break
             except:
                 pass
             await asyncio.sleep(1)
 
-        # 2. Nhặt theo reaction nếu thấy
-        if fetched_message and len(fetched_message.reactions) > grab_index:
-            target_reaction = fetched_message.reactions[grab_index]
-            await fetched_message.add_reaction(target_reaction.emoji)
-            print(f"[{account_info['channel_id']}] → ✅ {bot.user.name} ĐÃ NHẶT theo reaction thật (Vị trí {grab_index+1})")
-        
-        # 3. [QUAN TRỌNG] Nếu không thấy, thả mù trái tim đỏ
+        # 2. Bấm nút theo vị trí
+        if len(found_buttons) > grab_index:
+            target_button = found_buttons[grab_index]
+            # --- LỆNH QUAN TRỌNG NHẤT: CLICK ---
+            await target_button.click() 
+            print(f"[{account_info['channel_id']}] → 🖱️ {bot.user.name} ĐÃ CLICK nút vị trí {grab_index+1}!")
         else:
-            print(f"[{account_info['channel_id']}] → ⚠️ Không thấy Reaction (có thể là Button). {bot.user.name} đang thả mù '❤️'...")
-            # Thử thả cả 2 loại tim phổ biến đề phòng
-            await message.add_reaction("❤️") 
-            # await message.add_reaction("💖") # Bỏ comment dòng này nếu muốn thử thêm tim lấp lánh
+            print(f"[{account_info['channel_id']}] → ❌ {bot.user.name} KHÔNG TÌM THẤY NÚT (Tìm thấy {len(found_buttons)} nút).")
 
     except Exception as e:
-        print(f"[{account_info['channel_id']}] → ❌ Lỗi khi {bot.user.name} thả tim: {e}")
+        print(f"[{account_info['channel_id']}] → ⚠️ Lỗi CLICK của {bot.user.name}: {e}")
     
     await asyncio.sleep(2)
     if KTB_CHANNEL_ID:
@@ -78,10 +86,10 @@ async def run_account(account, grab_index, grab_time):
     async def on_message(message):
         if message.author.id == SOFI_ID and str(message.channel.id) == account["channel_id"]:
             content = message.content.lower()
-            # Điều kiện nhận diện đơn giản nhất có thể
             if "dropping" in content or "thả" in content:
-                print(f"[DEBUG] -> ✅ Phát hiện Sofi drop! {bot.user.name} chuẩn bị nhặt...")
-                asyncio.create_task(react_and_message(message, grab_index, grab_time, bot, account))
+                print(f"[DEBUG] -> ✅ Phát hiện drop! {bot.user.name} chuẩn bị click nút...")
+                # Gọi hàm CLICK mới thay vì hàm REACT cũ
+                asyncio.create_task(click_and_message(message, grab_index, grab_time, bot, account))
 
     try:
         await bot.start(account["token"])
