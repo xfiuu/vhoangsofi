@@ -23,8 +23,8 @@ except (ValueError, TypeError):
     KTB_CHANNEL_ID = None
 
 
-# Emoji theo đúng vị trí của Sofi: 💖 (1), 💖 (2), 💖 (3)
-FIXED_EMOJIS = ["💖", "💖", "💖", "💖", "💖", "💖"]
+# Emoji theo đúng vị trí của Sofi: ❤️ (1), ❤️ (2), ❤️ (3)
+FIXED_EMOJIS = ["❤️", "❤️", "❤️", "❤️", "❤️", "❤️"]
 GRAB_TIMES = [1.3, 2.3, 3.2, 1.3, 2.3, 3.2]
 
 # Danh sách để lưu các bot đã đăng nhập thành công
@@ -145,4 +145,5 @@ async def main():
 if __name__ == "__main__":
     # Chạy hàm main của asyncio
     asyncio.run(main())
+
 
