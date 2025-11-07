@@ -16,8 +16,8 @@ accounts = [
     {"token": os.getenv("TOKEN6"), "channel_id": os.getenv("CHANNEL_ID")},
 ]
 
-# ID của bot Karuta và kênh để gửi lệnh "kt b"
-KARUTA_ID = 646937666251915264
+# ID của bot Sofi và kênh để gửi lệnh "sb"
+SOFI_ID = 853629533855809596
 try:
     # discord.py-self yêu cầu ID là số nguyên (integer)
     KTB_CHANNEL_ID = int(os.getenv("KTB_CHANNEL_ID")) 
@@ -26,7 +26,8 @@ except (ValueError, TypeError):
     KTB_CHANNEL_ID = None
 
 
-FIXED_EMOJIS = ["1️⃣", "2️⃣", "3️⃣", "1️⃣", "2️⃣", "3️⃣"]
+# Emoji theo đúng vị trí của Sofi: 💖 (1), 💖 (2), 💖 (3)
+FIXED_EMOJIS = ["💖", "💖", "💖", "💖", "💖", "💖"]
 GRAB_TIMES = [1.3, 2.3, 3.2, 1.3, 2.3, 3.2]
 
 # Danh sách để lưu các bot đã đăng nhập thành công
@@ -47,17 +48,17 @@ async def react_and_message(message, emoji, delay, bot, account_info):
     
     await asyncio.sleep(2) # Đợi 2 giây trước khi gửi lệnh
     
-    # Gửi lệnh "kt b" vào kênh riêng
+    # Gửi lệnh "sb" vào kênh riêng
     if KTB_CHANNEL_ID:
         try:
             target_channel = bot.get_channel(KTB_CHANNEL_ID)
             if target_channel:
-                await target_channel.send("kt b")
-                print(f"[{account_info['channel_id']}] → Đã gửi 'kt b' từ user {bot.user}")
+                await target_channel.send("sb")
+                print(f"[{account_info['channel_id']}] → Đã gửi 'sb' từ user {bot.user}")
             else:
                 print(f"[{account_info['channel_id']}] → Không tìm thấy kênh với ID: {KTB_CHANNEL_ID}")
         except Exception as e:
-            print(f"[{account_info['channel_id']}] → Lỗi khi gửi 'kt b': {e}")
+            print(f"[{account_info['channel_id']}] → Lỗi khi gửi 'sb': {e}")
 
 async def run_account(account, emoji, grab_time):
     """Khởi tạo, định nghĩa sự kiện và chạy một instance bot."""
@@ -72,9 +73,9 @@ async def run_account(account, emoji, grab_time):
     @bot.event
     async def on_message(message):
         """Sự kiện được kích hoạt mỗi khi có tin nhắn mới."""
-        # Chỉ xử lý tin nhắn từ Karuta, trong đúng kênh và có nội dung drop
-        if message.author.id == KARUTA_ID and \
-           "is dropping 3 cards!" in message.content and \
+        # Chỉ xử lý tin nhắn từ Sofi, trong đúng kênh và có nội dung drop (ĐÃ SỬA)
+        if message.author.id == SOFI_ID and \
+           ("is dropping" in message.content or "đã thả thẻ" in message.content) and \
            str(message.channel.id) == account["channel_id"]:
             
             # Tạo một task mới để xử lý reaction và tin nhắn mà không làm block bot
@@ -88,7 +89,7 @@ async def run_account(account, emoji, grab_time):
         print(f"Một lỗi không xác định đã xảy ra với bot {account['token'][:6]}...: {e}")
 
 async def drop_loop():
-    """Vòng lặp vô hạn để gửi lệnh 'kd' tuần tự qua các tài khoản."""
+    """Vòng lặp vô hạn để gửi lệnh 'sd' tuần tự qua các tài khoản."""
     # Đợi cho đến khi tất cả các bot đã sẵn sàng
     print("Đang đợi tất cả các tài khoản đăng nhập...")
     while len(running_bots) < len(accounts):
@@ -105,17 +106,17 @@ async def drop_loop():
             
             channel = bot.get_channel(channel_id)
             if channel:
-                await channel.send("kd")
-                print(f"[{channel_id}] → Đã gửi lệnh 'kd' từ user {bot.user} (Acc thứ {i % len(accounts) + 1})")
+                await channel.send("sd")
+                print(f"[{channel_id}] → Đã gửi lệnh 'sd' từ user {bot.user} (Acc thứ {i % len(accounts) + 1})")
             else:
-                print(f"[{channel_id}] → Không tìm thấy kênh để gửi lệnh 'kd' cho user {bot.user}.")
+                print(f"[{channel_id}] → Không tìm thấy kênh để gửi lệnh 'sd' cho user {bot.user}.")
                 
         except Exception as e:
             print(f"[{acc['channel_id']}] → Lỗi trong vòng lặp drop: {e}")
         
         i += 1
-        # Đợi 10 phút 5 giây (605 giây) trước khi gửi lệnh tiếp theo
-        await asyncio.sleep(605)
+        # Đợi 4 phút 5 giây (245 giây) trước khi gửi lệnh tiếp theo (ĐÃ SỬA)
+        await asyncio.sleep(245)
 
 async def main():
     """Hàm chính để chạy tất cả các bot và vòng lặp drop đồng thời."""
