@@ -6,8 +6,8 @@ import threading
 from keep_alive import keep_alive
 
 # --- Cấu hình ---
-# CHÚ Ý: Chỉ điền đúng số lượng tài khoản bạn thực sự dùng.
-# Nếu dùng 3 acc, chỉ để 3 dòng này.
+# CHÚ Ý QUAN TRỌNG: Nếu chỉ dùng 3 tài khoản, hãy xóa 3 dòng dưới đi.
+# Số lượng dòng ở đây PHẢI KHỚP với số token thực tế bạn có trong file .env
 accounts = [
     {"token": os.getenv("TOKEN1"), "channel_id": os.getenv("CHANNEL_ID")},
     {"token": os.getenv("TOKEN2"), "channel_id": os.getenv("CHANNEL_ID")},
@@ -20,37 +20,43 @@ try:
 except (ValueError, TypeError):
     KTB_CHANNEL_ID = None
 
-# Thay vì emoji cố định, ta dùng INDEX (vị trí).
-# 0 = Reaction đầu tiên (trái tim 1)
-# 1 = Reaction thứ hai (trái tim 2)
-# 2 = Reaction thứ ba (trái tim 3)
+# Vị trí cần nhặt (0, 1, 2 tương ứng với 3 thẻ từ trái qua phải)
 GRAB_INDICES = [0, 1, 2] 
-GRAB_TIMES = [2, 2.3, 3.2]
+GRAB_TIMES = [1.3, 2.3, 3.2]
 
 running_bots = []
 
 # --- Hàm xử lý chính ---
 
 async def react_and_message(message, grab_index, delay, bot, account_info):
-    """Đợi, sau đó nhặt reaction TẠI VỊ TRÍ chỉ định."""
+    """Đợi reaction xuất hiện và nhặt theo vị trí, có cơ chế dự phòng."""
     await asyncio.sleep(delay)
     
     try:
-        # Cực kỳ quan trọng: Phải fetch lại tin nhắn để thấy các reaction mà Sofi vừa thả
         fetched_message = await message.channel.fetch_message(message.id)
         
-        if fetched_message.reactions and len(fetched_message.reactions) > grab_index:
-            # Lấy đúng reaction mà Sofi đã dùng
-            target_reaction = fetched_message.reactions[grab_index]
-            
-            # Bot thả reaction đó
-            await fetched_message.add_reaction(target_reaction.emoji)
-            print(f"[{account_info['channel_id']}] → Acc {bot.user} đã nhặt vị trí {grab_index+1} (Emoji: {target_reaction.emoji})")
-        else:
-             print(f"[{account_info['channel_id']}] → Acc {bot.user} không thấy reaction số {grab_index+1} để nhặt.")
+        # Cố gắng đợi tối đa 2 giây để Sofi thả đủ 3 reaction (kiểm tra mỗi 0.5s)
+        wait_count = 0
+        while len(fetched_message.reactions) < 3 and wait_count < 4:
+            await asyncio.sleep(0.5)
+            fetched_message = await message.channel.fetch_message(message.id)
+            wait_count += 1
 
+        # --- Cố gắng nhặt theo vị trí (Ưu tiên 1) ---
+        if len(fetched_message.reactions) > grab_index:
+            target_reaction = fetched_message.reactions[grab_index]
+            await fetched_message.add_reaction(target_reaction.emoji)
+            print(f"[{account_info['channel_id']}] → ✅ {bot.user.name} đã nhặt vị trí {grab_index+1}")
+            
+        # --- Nếu không tìm thấy vị trí, dùng phương án dự phòng thả tim (Ưu tiên 2) ---
+        else:
+             print(f"[{account_info['channel_id']}] → ⚠️ Không thấy vị trí {grab_index+1}, {bot.user.name} thử thả '💖'...")
+             await fetched_message.add_reaction("💖")
+
+    except discord.Forbidden:
+        print(f"[{account_info['channel_id']}] → ❌ {bot.user.name} bị chặn (không có quyền thả reaction).")
     except Exception as e:
-        print(f"[{account_info['channel_id']}] → Lỗi khi nhặt: {e}")
+        print(f"[{account_info['channel_id']}] → ❌ Lỗi khi {bot.user.name} nhặt: {e}")
     
     await asyncio.sleep(2)
     
@@ -72,11 +78,11 @@ async def run_account(account, grab_index, grab_time):
 
     @bot.event
     async def on_message(message):
+        # Kiểm tra đúng bot Sofi và đúng nội dung drop (cả tiếng Anh và Việt)
         if message.author.id == SOFI_ID and \
            ("is dropping" in message.content or "đã thả thẻ" in message.content) and \
            str(message.channel.id) == account["channel_id"]:
             
-            # Truyền grab_index thay vì emoji cố định
             asyncio.create_task(react_and_message(message, grab_index, grab_time, bot, account))
 
     try:
@@ -98,9 +104,9 @@ async def drop_loop():
             channel = bot.get_channel(int(acc["channel_id"]))
             if channel:
                 await channel.send("sd")
-                print(f"[{acc['channel_id']}] → {bot.user} đã gửi 'sd'")
+                print(f"[{acc['channel_id']}] → 🤖 {bot.user.name} đã gửi 'sd'")
         except Exception as e:
-            print(f"Lỗi drop: {e}")
+            print(f"Lỗi vòng lặp drop: {e}")
         
         i += 1
         await asyncio.sleep(245) # 4 phút 5 giây
@@ -110,7 +116,6 @@ async def main():
     tasks = []
     for i, acc in enumerate(accounts):
         if acc.get("token"):
-            # Lấy index tương ứng cho acc này
             grab_index = GRAB_INDICES[i % len(GRAB_INDICES)]
             grab_time = GRAB_TIMES[i % len(GRAB_TIMES)]
             tasks.append(run_account(acc, grab_index, grab_time))
@@ -118,6 +123,8 @@ async def main():
     if tasks:
         tasks.append(drop_loop())
         await asyncio.gather(*tasks)
+    else:
+        print("Chưa cấu hình token nào trong file .env!")
 
 if __name__ == "__main__":
     asyncio.run(main())
