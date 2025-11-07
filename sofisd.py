@@ -6,144 +6,118 @@ import threading
 from keep_alive import keep_alive
 
 # --- Cấu hình ---
-# Lấy thông tin tài khoản từ biến môi trường
+# CHÚ Ý: Chỉ điền đúng số lượng tài khoản bạn thực sự dùng.
+# Nếu dùng 3 acc, chỉ để 3 dòng này.
 accounts = [
     {"token": os.getenv("TOKEN1"), "channel_id": os.getenv("CHANNEL_ID")},
     {"token": os.getenv("TOKEN2"), "channel_id": os.getenv("CHANNEL_ID")},
     {"token": os.getenv("TOKEN3"), "channel_id": os.getenv("CHANNEL_ID")},
 ]
 
-# ID của bot Sofi và kênh để gửi lệnh "sb"
 SOFI_ID = 853629533855809596
 try:
-    # discord.py-self yêu cầu ID là số nguyên (integer)
     KTB_CHANNEL_ID = int(os.getenv("KTB_CHANNEL_ID")) 
 except (ValueError, TypeError):
-    print("Lỗi: KTB_CHANNEL_ID không hợp lệ hoặc chưa được thiết lập trong biến môi trường.")
     KTB_CHANNEL_ID = None
 
+# Thay vì emoji cố định, ta dùng INDEX (vị trí).
+# 0 = Reaction đầu tiên (trái tim 1)
+# 1 = Reaction thứ hai (trái tim 2)
+# 2 = Reaction thứ ba (trái tim 3)
+GRAB_INDICES = [0, 1, 2] 
+GRAB_TIMES = [2, 2.3, 3.2]
 
-# Emoji theo đúng vị trí của Sofi: ❤️ (1), ❤️ (2), ❤️ (3)
-FIXED_EMOJIS = ["❤️", "❤️", "❤️", "❤️", "❤️", "❤️"]
-GRAB_TIMES = [1.3, 2.3, 3.2, 1.3, 2.3, 3.2]
-
-# Danh sách để lưu các bot đã đăng nhập thành công
 running_bots = []
 
 # --- Hàm xử lý chính ---
 
-async def react_and_message(message, emoji, delay, bot, account_info):
-    """Đợi một khoảng thời gian, sau đó thả reaction và gửi tin nhắn."""
+async def react_and_message(message, grab_index, delay, bot, account_info):
+    """Đợi, sau đó nhặt reaction TẠI VỊ TRÍ chỉ định."""
     await asyncio.sleep(delay)
     
-    # Thả reaction vào tin nhắn drop
     try:
-        await message.add_reaction(emoji)
-        print(f"[{account_info['channel_id']}] → Đã thả reaction {emoji} cho user {bot.user}")
+        # Cực kỳ quan trọng: Phải fetch lại tin nhắn để thấy các reaction mà Sofi vừa thả
+        fetched_message = await message.channel.fetch_message(message.id)
+        
+        if fetched_message.reactions and len(fetched_message.reactions) > grab_index:
+            # Lấy đúng reaction mà Sofi đã dùng
+            target_reaction = fetched_message.reactions[grab_index]
+            
+            # Bot thả reaction đó
+            await fetched_message.add_reaction(target_reaction.emoji)
+            print(f"[{account_info['channel_id']}] → Acc {bot.user} đã nhặt vị trí {grab_index+1} (Emoji: {target_reaction.emoji})")
+        else:
+             print(f"[{account_info['channel_id']}] → Acc {bot.user} không thấy reaction số {grab_index+1} để nhặt.")
+
     except Exception as e:
-        print(f"[{account_info['channel_id']}] → Lỗi khi thả reaction: {e}")
+        print(f"[{account_info['channel_id']}] → Lỗi khi nhặt: {e}")
     
-    await asyncio.sleep(2) # Đợi 2 giây trước khi gửi lệnh
+    await asyncio.sleep(2)
     
-    # Gửi lệnh "sb" vào kênh riêng
     if KTB_CHANNEL_ID:
         try:
             target_channel = bot.get_channel(KTB_CHANNEL_ID)
             if target_channel:
                 await target_channel.send("sb")
-                print(f"[{account_info['channel_id']}] → Đã gửi 'sb' từ user {bot.user}")
-            else:
-                print(f"[{account_info['channel_id']}] → Không tìm thấy kênh với ID: {KTB_CHANNEL_ID}")
-        except Exception as e:
-            print(f"[{account_info['channel_id']}] → Lỗi khi gửi 'sb': {e}")
+        except:
+            pass
 
-async def run_account(account, emoji, grab_time):
-    """Khởi tạo, định nghĩa sự kiện và chạy một instance bot."""
+async def run_account(account, grab_index, grab_time):
     bot = commands.Bot(command_prefix="!", self_bot=True)
 
     @bot.event
     async def on_ready():
-        """Sự kiện được kích hoạt khi bot đã đăng nhập và sẵn sàng."""
-        print(f"[{account['channel_id']}] → Đăng nhập thành công với user: {bot.user} (ID: {bot.user.id})")
-        running_bots.append(bot) # Thêm bot vào danh sách đang chạy
+        print(f"[{account['channel_id']}] → Đăng nhập thành công: {bot.user}")
+        running_bots.append(bot)
 
     @bot.event
     async def on_message(message):
-        """Sự kiện được kích hoạt mỗi khi có tin nhắn mới."""
-        # Chỉ xử lý tin nhắn từ Sofi, trong đúng kênh và có nội dung drop (ĐÃ SỬA)
         if message.author.id == SOFI_ID and \
            ("is dropping" in message.content or "đã thả thẻ" in message.content) and \
            str(message.channel.id) == account["channel_id"]:
             
-            # Tạo một task mới để xử lý reaction và tin nhắn mà không làm block bot
-            asyncio.create_task(react_and_message(message, emoji, grab_time, bot, account))
+            # Truyền grab_index thay vì emoji cố định
+            asyncio.create_task(react_and_message(message, grab_index, grab_time, bot, account))
 
     try:
         await bot.start(account["token"])
-    except discord.errors.LoginFailure:
-        print(f"Lỗi đăng nhập với token bắt đầu bằng: {account['token'][:6]}... Token không hợp lệ.")
     except Exception as e:
-        print(f"Một lỗi không xác định đã xảy ra với bot {account['token'][:6]}...: {e}")
+        print(f"Lỗi đăng nhập {account['token'][:6]}...: {e}")
 
 async def drop_loop():
-    """Vòng lặp vô hạn để gửi lệnh 'sd' tuần tự qua các tài khoản."""
-    # Đợi cho đến khi tất cả các bot đã sẵn sàng
-    print("Đang đợi tất cả các tài khoản đăng nhập...")
+    print("Đang đợi các tài khoản đăng nhập...")
     while len(running_bots) < len(accounts):
         await asyncio.sleep(1)
-    print("Tất cả các tài khoản đã sẵn sàng. Bắt đầu vòng lặp drop.")
+    print(f"Đã sẵn sàng {len(running_bots)}/{len(accounts)} tài khoản. Bắt đầu auto drop.")
 
     i = 0
     while True:
         try:
-            # Chọn bot và thông tin tài khoản tương ứng
             bot = running_bots[i % len(running_bots)]
             acc = accounts[i % len(accounts)]
-            channel_id = int(acc["channel_id"])
-            
-            channel = bot.get_channel(channel_id)
+            channel = bot.get_channel(int(acc["channel_id"]))
             if channel:
                 await channel.send("sd")
-                print(f"[{channel_id}] → Đã gửi lệnh 'sd' từ user {bot.user} (Acc thứ {i % len(accounts) + 1})")
-            else:
-                print(f"[{channel_id}] → Không tìm thấy kênh để gửi lệnh 'sd' cho user {bot.user}.")
-                
+                print(f"[{acc['channel_id']}] → {bot.user} đã gửi 'sd'")
         except Exception as e:
-            print(f"[{acc['channel_id']}] → Lỗi trong vòng lặp drop: {e}")
+            print(f"Lỗi drop: {e}")
         
         i += 1
-        # Đợi 4 phút 5 giây (245 giây) trước khi gửi lệnh tiếp theo (ĐÃ SỬA)
-        await asyncio.sleep(245)
+        await asyncio.sleep(245) # 4 phút 5 giây
 
 async def main():
-    """Hàm chính để chạy tất cả các bot và vòng lặp drop đồng thời."""
-    # Chạy keep_alive trong một luồng riêng để không chặn asyncio
-    keep_alive_thread = threading.Thread(target=keep_alive)
-    keep_alive_thread.daemon = True
-    keep_alive_thread.start()
-
-    # Tạo danh sách các task cần chạy
+    threading.Thread(target=keep_alive, daemon=True).start()
     tasks = []
     for i, acc in enumerate(accounts):
-        # Kiểm tra token có tồn tại không trước khi tạo task
         if acc.get("token"):
-            emoji = FIXED_EMOJIS[i % len(FIXED_EMOJIS)]
-            grab_time = GRAB_TIMES[i]
-            tasks.append(run_account(acc, emoji, grab_time))
-        else:
-            print(f"Cảnh báo: Token thứ {i+1} chưa được thiết lập. Bỏ qua tài khoản này.")
-
-    # Thêm task của vòng lặp drop vào danh sách
-    if tasks: # Chỉ chạy drop_loop nếu có ít nhất một tài khoản hợp lệ
+            # Lấy index tương ứng cho acc này
+            grab_index = GRAB_INDICES[i % len(GRAB_INDICES)]
+            grab_time = GRAB_TIMES[i % len(GRAB_TIMES)]
+            tasks.append(run_account(acc, grab_index, grab_time))
+    
+    if tasks:
         tasks.append(drop_loop())
-        # Chạy tất cả các task cùng lúc
         await asyncio.gather(*tasks)
-    else:
-        print("Không có tài khoản nào được cấu hình để chạy.")
-
 
 if __name__ == "__main__":
-    # Chạy hàm main của asyncio
     asyncio.run(main())
-
-
