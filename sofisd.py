@@ -19,7 +19,7 @@ except (ValueError, TypeError):
     KTB_CHANNEL_ID = None
 
 GRAB_INDICES = [0, 1, 2] 
-GRAB_TIMES = [1.3, 2.3, 3.2]
+GRAB_TIMES = [2.2, 2.4, 2.6]
 
 running_bots = []
 
@@ -115,7 +115,7 @@ async def drop_loop():
             print(f"Lỗi vòng lặp drop: {e}")
         
         i += 1
-        await asyncio.sleep(245)
+        await asyncio.sleep(250)
 
 async def main():
     threading.Thread(target=keep_alive, daemon=True).start()
@@ -134,3 +134,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
