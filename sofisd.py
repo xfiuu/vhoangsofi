@@ -6,7 +6,7 @@ import threading
 from keep_alive import keep_alive
 
 # --- Cấu hình ---
-# CHÚ Ý: Đảm bảo số lượng dòng ở đây khớp với số token trong file .env
+# Đảm bảo số lượng dòng khớp với số token trong file .env
 accounts = [
     {"token": os.getenv("TOKEN1"), "channel_id": os.getenv("CHANNEL_ID")},
     {"token": os.getenv("TOKEN2"), "channel_id": os.getenv("CHANNEL_ID")},
@@ -29,8 +29,7 @@ running_bots = []
 async def react_and_message(message, grab_index, delay, bot, account_info):
     await asyncio.sleep(delay)
     try:
-        # --- DEBUG MỚI: In ra thời điểm bắt đầu nhặt ---
-        print(f"[{account_info['channel_id']}] → 🏁 {bot.user.name} bắt đầu quy trình nhặt vị trí {grab_index+1}...")
+        print(f"[{account_info['channel_id']}] → 🏁 {bot.user.name} bắt đầu nhặt vị trí {grab_index+1}...")
 
         fetched_message = None
         for i in range(5):
@@ -40,17 +39,14 @@ async def react_and_message(message, grab_index, delay, bot, account_info):
                     break
             except:
                 pass
-            # --- DEBUG MỚI: In ra số reaction hiện tại ---
-            current_reactions = len(fetched_message.reactions) if fetched_message else 0
-            print(f"   ... (Acc {bot.user.name} lần thử {i+1}: thấy {current_reactions} nút)")
             await asyncio.sleep(1)
 
         if fetched_message and len(fetched_message.reactions) > grab_index:
             target_reaction = fetched_message.reactions[grab_index]
             await fetched_message.add_reaction(target_reaction.emoji)
-            print(f"[{account_info['channel_id']}] → ✅ {bot.user.name} ĐÃ NHẶT vị trí {grab_index+1} (Emoji: {target_reaction.emoji})")
+            print(f"[{account_info['channel_id']}] → ✅ {bot.user.name} ĐÃ NHẶT vị trí {grab_index+1}")
         else:
-            print(f"[{account_info['channel_id']}] → ❌ {bot.user.name} KHÔNG TÌM THẤY NÚT vị trí {grab_index+1} sau 5 giây.")
+            print(f"[{account_info['channel_id']}] → ❌ {bot.user.name} KHÔNG TÌM THẤY NÚT vị trí {grab_index+1}.")
 
     except Exception as e:
         print(f"[{account_info['channel_id']}] → ⚠️ Lỗi nhặt của {bot.user.name}: {e}")
@@ -74,20 +70,17 @@ async def run_account(account, grab_index, grab_time):
 
     @bot.event
     async def on_message(message):
-        # --- DEBUG QUAN TRỌNG: In ra MỌI tin nhắn từ Sofi trong kênh này ---
+        # Chỉ xử lý tin nhắn từ Sofi trong đúng kênh
         if message.author.id == SOFI_ID and str(message.channel.id) == account["channel_id"]:
-             print(f"\n[DEBUG] Sofi vừa nhắn trong kênh {account['channel_id']}:")
-             print(f"   → Nội dung: '{message.content}'")
-             print(f"   → Có chứa 'is dropping'? {'CÓ' if 'is dropping' in message.content else 'KHÔNG'}")
-             print(f"   → Có chứa 'đã thả thẻ'? {'CÓ' if 'đã thả thẻ' in message.content else 'KHÔNG'}")
-
-        # Kiểm tra điều kiện để nhặt
-        if message.author.id == SOFI_ID and \
-           ("is dropping" in message.content or "đã thả thẻ" in message.content) and \
-           str(message.channel.id) == account["channel_id"]:
+            # Chuyển nội dung về chữ thường để so sánh dễ hơn
+            content = message.content.lower()
             
-            print(f"[DEBUG] -> ✅ ĐIỀU KIỆN ĐÚNG! Kích hoạt nhặt cho {bot.user.name}")
-            asyncio.create_task(react_and_message(message, grab_index, grab_time, bot, account))
+            # Điều kiện nhận diện mới: linh hoạt hơn, chấp nhận cả in đậm
+            is_dropping = "dropping" in content or "thả" in content
+            
+            if is_dropping:
+                print(f"[DEBUG] -> ✅ Phát hiện Sofi drop! {bot.user.name} chuẩn bị nhặt...")
+                asyncio.create_task(react_and_message(message, grab_index, grab_time, bot, account))
 
     try:
         await bot.start(account["token"])
