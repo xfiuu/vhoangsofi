@@ -119,9 +119,7 @@ async def drop_loop():
                 print(f"[{acc['channel_id']}] → 🤖 {bot.user.name} đã gửi 'sd'")
             
             i += 1
-            # Tăng thời gian drop lên một chút nếu bạn vẫn bị rate limit.
-            # 260s = 4 phút 20 giây (an toàn hơn 250s một chút)
-            await asyncio.sleep(260) 
+            await asyncio.sleep(250) 
 
         except Exception as e:
             print(f"Lỗi vòng lặp drop: {e}")
@@ -149,3 +147,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
