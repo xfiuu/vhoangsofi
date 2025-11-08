@@ -19,44 +19,42 @@ except (ValueError, TypeError):
     KTB_CHANNEL_ID = None
 
 GRAB_INDICES = [0, 1, 2] 
-GRAB_TIMES = [2.2, 2.4, 2.6]
+# Tăng nhẹ thời gian grab để tránh các bot tranh nhau gửi request cùng 1 mili giây
+GRAB_TIMES = [1.4, 1.6, 1.8] 
 
 running_bots = []
 
-# --- Hàm xử lý chính (ĐÃ NÂNG CẤP LÊN BUTTON) ---
+# --- Hàm xử lý chính ---
 
 async def click_and_message(message, grab_index, delay, bot, account_info):
     await asyncio.sleep(delay)
     try:
         print(f"[{account_info['channel_id']}] → 🏁 {bot.user.name} đang tìm nút vị trí {grab_index+1}...")
 
-        # 1. Tìm tin nhắn và đợi Button xuất hiện
         fetched_message = None
         found_buttons = []
         
-        for i in range(5): # Thử 5 lần, mỗi lần 1s
+        # Thử 5 lần, mỗi lần cách nhau 2s (giảm spam request so với 1s cũ)
+        for i in range(5): 
             try:
                 fetched_message = await message.channel.fetch_message(message.id)
-                
-                # Lọc ra tất cả các Button từ tin nhắn
                 found_buttons = []
                 for action_row in fetched_message.components:
                     for component in action_row.children:
-                        # Chỉ lấy component là Button (loại trừ menu, link...)
                         if isinstance(component, discord.Button):
                              found_buttons.append(component)
                 
-                # Nếu tìm thấy ít nhất 3 nút (3 thẻ), thì dừng tìm kiếm
                 if len(found_buttons) >= 3:
                     break
-            except:
+            except Exception as e:
+                # In lỗi nhỏ nếu fetch thất bại (có thể do rate limit nhẹ)
+                print(f"[{bot.user.name}] Thử tìm nút thất bại (lần {i+1}): {e}")
                 pass
-            await asyncio.sleep(1)
+            await asyncio.sleep(2) # Tăng thời gian nghỉ lên 2s
 
-        # 2. Bấm nút theo vị trí
         if len(found_buttons) > grab_index:
             target_button = found_buttons[grab_index]
-            # --- LỆNH QUAN TRỌNG NHẤT: CLICK ---
+            await asyncio.sleep(0.5) # Nghỉ nhẹ trước khi click thật
             await target_button.click() 
             print(f"[{account_info['channel_id']}] → 🖱️ {bot.user.name} ĐÃ CLICK nút vị trí {grab_index+1}!")
         else:
@@ -70,16 +68,22 @@ async def click_and_message(message, grab_index, delay, bot, account_info):
         try:
             target_channel = bot.get_channel(KTB_CHANNEL_ID)
             if target_channel:
-                await target_channel.send("st b")
+                await target_channel.send("st z")
         except:
             pass
 
-async def run_account(account, grab_index, grab_time):
+# Thêm tham số startup_delay để đăng nhập tuần tự
+async def run_account(account, grab_index, grab_time, startup_delay):
+    # Đợi trước khi bắt đầu phiên đăng nhập này
+    if startup_delay > 0:
+        print(f"⏳ Đang đợi {startup_delay}s trước khi đăng nhập tài khoản tiếp theo...")
+        await asyncio.sleep(startup_delay)
+
     bot = commands.Bot(command_prefix="!", self_bot=True)
 
     @bot.event
     async def on_ready():
-        print(f"[{account['channel_id']}] → Đăng nhập thành công: {bot.user}")
+        print(f"[{account['channel_id']}] → ✅ Đăng nhập thành công: {bot.user}")
         running_bots.append(bot)
 
     @bot.event
@@ -87,20 +91,22 @@ async def run_account(account, grab_index, grab_time):
         if message.author.id == SOFI_ID and str(message.channel.id) == account["channel_id"]:
             content = message.content.lower()
             if "dropping" in content or "thả" in content:
-                print(f"[DEBUG] -> ✅ Phát hiện drop! {bot.user.name} chuẩn bị click nút...")
-                # Gọi hàm CLICK mới thay vì hàm REACT cũ
+                print(f"[DEBUG] -> 🔎 Phát hiện drop! {bot.user.name} chuẩn bị click nút...")
                 asyncio.create_task(click_and_message(message, grab_index, grab_time, bot, account))
 
     try:
         await bot.start(account["token"])
     except Exception as e:
-        print(f"Lỗi đăng nhập {account['token'][:6]}...: {e}")
+        print(f"❌ Lỗi đăng nhập {account['token'][:6]}...: {e}")
 
 async def drop_loop():
-    print("Đang đợi các tài khoản đăng nhập...")
+    print("⏳ Đang đợi TẤT CẢ các tài khoản đăng nhập xong...")
     while len(running_bots) < len(accounts):
-        await asyncio.sleep(1)
-    print(f"Đã sẵn sàng {len(running_bots)}/{len(accounts)} tài khoản. Bắt đầu auto drop.")
+        await asyncio.sleep(5) # Kiểm tra mỗi 5s
+    
+    print(f"🚀 Đã sẵn sàng {len(running_bots)}/{len(accounts)} tài khoản. Bắt đầu auto drop.")
+    # Đợi thêm 10s cho ổn định hẳn
+    await asyncio.sleep(10)
 
     i = 0
     while True:
@@ -111,11 +117,15 @@ async def drop_loop():
             if channel:
                 await channel.send("sd")
                 print(f"[{acc['channel_id']}] → 🤖 {bot.user.name} đã gửi 'sd'")
+            
+            i += 1
+            # Tăng thời gian drop lên một chút nếu bạn vẫn bị rate limit.
+            # 260s = 4 phút 20 giây (an toàn hơn 250s một chút)
+            await asyncio.sleep(260) 
+
         except Exception as e:
             print(f"Lỗi vòng lặp drop: {e}")
-        
-        i += 1
-        await asyncio.sleep(250)
+            await asyncio.sleep(60) # Nếu lỗi, nghỉ 1 phút rồi thử lại
 
 async def main():
     threading.Thread(target=keep_alive, daemon=True).start()
@@ -124,9 +134,14 @@ async def main():
         if acc.get("token"):
             grab_index = GRAB_INDICES[i % len(GRAB_INDICES)]
             grab_time = GRAB_TIMES[i % len(GRAB_TIMES)]
-            tasks.append(run_account(acc, grab_index, grab_time))
+            
+            # QUAN TRỌNG: Mỗi bot đăng nhập cách nhau 10 giây
+            startup_delay = i * 10 
+            
+            tasks.append(run_account(acc, grab_index, grab_time, startup_delay))
     
     if tasks:
+        # Chạy drop_loop song song với việc các bot đang đăng nhập từ từ
         tasks.append(drop_loop())
         await asyncio.gather(*tasks)
     else:
@@ -134,5 +149,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
